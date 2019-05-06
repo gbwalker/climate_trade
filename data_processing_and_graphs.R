@@ -51,24 +51,27 @@ df_trade %>%
   # Merge in the trend figures.
 
   left_join(df_gain_trend, by = "country_or_area") %>%
-  filter(weight_kg > 4.08e10) %>%
+  filter(weight_kg > 200000000) %>%
+  filter(!is.na(weight_kg)) %>%
   arrange(desc(weight_kg)) %>%
   mutate(sign = case_when(
     sign == -1 ~ "More vulnerable",
     sign == 1 ~ "Less vulnerable",
     TRUE ~ "Negligent change"
   )) %>%
-  mutate(country = factor(country_or_area, levels = c("Iraq", "Canada", "Kazakhstan", "Brazil", "Mexico"))) %>%
 
-  # Plot the top five exporters.
+  # Plot the top exporters.
 
-  ggplot(aes(country, (weight_kg / 1000000000), fill = sign)) +
+  ggplot(aes(reorder(country_or_area, -weight_kg), log(weight_kg), fill = sign)) +
   geom_histogram(stat = "identity") +
-  scale_fill_manual(values = c("seagreen", "indianred", "gray70")) +
-  labs(y = "Crude oil exports (bil. kg) in 2016", title = "2016’s top five crude oil exporters have different exposures to climate risk.") +
+  scale_fill_manual(values = c("seagreen", "indianred1", "gray70")) +
+  coord_cartesian(ylim = c(20, 26)) +
+  expand_limits(y = c(20, 30)) +
+  labs(y = "Crude oil exports (log bil. kg) in 2016", title = "Most of 2016’s top crude oil exporters are becoming less vulnerable to climate risk.") +
   theme(
     panel.background = element_blank(),
     axis.title.x = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = .2),
     text = element_text(size = 16, family = "LM Roman 10")
   ) +
   guides(fill = guide_legend(title = "Change in climate \n vulnerability, \n 2009–2015"))
@@ -96,7 +99,6 @@ usa <- left_join(usa, usa_gain, by = "year") %>%
 # Create a graph of gain vs. the commodities.
 
 ggplot(usa, aes(year, value, group = commodity, color = commodity)) +
-  # geom_point() +
   geom_smooth(se = FALSE, method = "loess", color = "gray70") +
   geom_line(color = "skyblue4", size = 1.5, aes(year, gain)) +
   scale_y_continuous(

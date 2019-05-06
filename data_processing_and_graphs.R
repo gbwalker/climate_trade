@@ -67,7 +67,7 @@ df_trade %>%
   scale_fill_manual(values = c("seagreen", "indianred1", "gray70")) +
   coord_cartesian(ylim = c(20, 26)) +
   expand_limits(y = c(20, 30)) +
-  labs(y = "Crude oil exports (log bil. kg) in 2016", title = "Most of 2016’s top crude oil exporters are becoming less vulnerable to climate risk.") +
+  labs(y = "Crude oil exports (log bil. kg) in 2016", title = "Most of 2016’s top crude oil exporters are \n becoming less vulnerable to climate risk.") +
   theme(
     panel.background = element_blank(),
     axis.title.x = element_blank(),

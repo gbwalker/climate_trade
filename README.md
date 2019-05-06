@@ -11,5 +11,5 @@ Second, U.S. cereal imports have climbed as climate risk increased. What risk in
 <img src = "us_cereals_trend.jpeg" width="85%" height="85%" />
 
 * The first phase of the project will consist of building a minimum viable product that juxtaposes climate scores and commodity trading trends for a handful of major countries and products with robust data.
-* The second phase will be implementing the models that generate predictions based on user input (e.g., "5% increase in the inequality score of the United States over the next 20 years").
+* The second phase will be implementing the models that generate predictions based on user input (e.g., "5 percent increase in the inequality score of the United States over the next 20 years").
 * The third phase will be incorporating as many countries and commodities as possible for a more robust user experience.

@@ -57,7 +57,7 @@ df_trade %>%
   mutate(sign = case_when(
     sign == -1 ~ "More vulnerable",
     sign == 1 ~ "Less vulnerable",
-    TRUE ~ "Negligent change"
+    TRUE ~ "Negligible change"
   )) %>%
 
   # Plot the top exporters.

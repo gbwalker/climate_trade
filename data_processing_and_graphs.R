@@ -14,8 +14,6 @@ library(extrafont)
 
 # Read in the climate vulnerability data.
 
-setwd("C:/Users/Gabriel/Desktop")
-
 raw_gain_delta <- read_csv("climate_vulnerability/gain/gain_delta.csv")
 raw_gdp <- read_csv("climate_vulnerability/indicators/gdp/score.csv")
 
@@ -34,6 +32,8 @@ df_gdp <- gather(raw_gdp, key = "year", value = "gdp", `1995`:`2015`) %>%
   clean_names()
 
 # Read in the trade data.
+
+setwd("C:/Users/Gabriel/Desktop")
 
 df_trade <- read_csv("trade/commodity_data.csv")
 

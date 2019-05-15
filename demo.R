@@ -17,8 +17,6 @@ library(janitor)
 # https://www.kaggle.com/unitednations/global-commodity-trade-statistics/
 ###
 
-setwd("C:/Users/Gabriel/Desktop")
-
 # First read in the vulnerability and readiness metadata.
 
 meta_v <- read_csv("climate_vulnerability/metadata_vuln.csv") %>% 
@@ -75,7 +73,7 @@ for (n in 1:length(raw)) {
 # Read in all of the indicators.
 ###
 
-setwd("C:/Users/Gabriel/Desktop/climate_vulnerability/indicators")
+setwd("climate_vulnerability/indicators")
 csv_i <- list.files(pattern = "*score.csv", recursive = TRUE)
 
 raw_i <- lapply(csv_i, read_csv)

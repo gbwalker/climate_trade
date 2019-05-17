@@ -6,15 +6,16 @@
 
 library(tidyverse)
 library(janitor)
+library(stringr)
+library(pls)
 
 #################
 ### DATA CLEANING
 #################
 
 ### 
-# Read in the climate and trade data, obtained from:
+# Read in the climate data obtained from:
 # https://gain.nd.edu/our-work/country-index/download-data/
-# https://www.kaggle.com/unitednations/global-commodity-trade-statistics/
 ###
 
 # First read in the vulnerability and readiness metadata.
@@ -127,7 +128,143 @@ df <- cbind(df, df_i) %>%
 # Save the cleaned data.
 
 write_rds(df, "df.rds")
+# df <- read_rds("df.rds")
 
-#################
 ### 
-#################
+# Read in the trade data, obtained from:
+# https://www.kaggle.com/unitednations/global-commodity-trade-statistics/
+###
+
+setwd("C:/Users/Gabriel/Desktop")
+trade_raw <- read_csv("trade/commodity_data.csv")
+
+# Use only countries and areas that have climate data.
+
+trade <- trade_raw %>%
+  
+  # Pick only the BRICS countries to use for the demo.
+  
+  filter(country_or_area %in% c("Brazil", "Russian Federation", "India", "China",
+                                "South Africa", "USA")) %>% 
+  
+  # Get the first word of the place name.
+  
+  mutate(short_name = str_extract(country_or_area, "\\w+")) %>%
+  
+  # Make a column for iso3.
+  
+  mutate(iso3 = case_when(
+    country_or_area == "Brazil" ~ "BRA",
+    country_or_area == "Russian Federation" ~ "RUS",
+    country_or_area == "India" ~ "IND",
+    country_or_area == "China" ~ "CHN",
+    country_or_area == "South Africa" ~ "ZAF",
+    country_or_area == "USA" ~ "USA",
+  )) %>% 
+  
+  # Adjust the country name of the US to match between datasets.
+  
+  mutate(country = case_when(
+    country_or_area == "USA" ~ "United States",
+    TRUE ~ country_or_area
+  )) %>% 
+  select(-country_or_area) %>% 
+
+  # Fix the appearance of the trade category variable.
+
+  mutate(category = str_remove(category, "\\d\\d_")) %>% 
+  mutate(category = str_replace_all(category, "_", " "))
+
+# trade <- read_rds("trade.rds")
+
+# Select only the countries of interest in the climate data.
+
+df_small <- df %>% 
+  filter(name %in% unique(trade$country))
+
+###########
+### PREPARE
+###########
+
+### Prepare the data for the PLS regression.
+
+# Just use the United States as a demo.
+
+df_us <- df_small %>% 
+  filter(name == "United States") %>% 
+  mutate(year = as.numeric(year)) %>% 
+  select(-iso3, -name)
+
+# Merge the two datasets.
+
+trade_us <- trade %>% 
+  filter(country == "United States" & category == "all commodities") %>% 
+  filter(year < 2016 & year >= 1995) %>% 
+  
+  # Focus only on exports.
+  
+  filter(flow == "Export") %>% 
+  left_join(df_us, by = "year") %>% 
+  
+  # Drop non-numeric data.
+  
+  select(-comm_code, -commodity, -flow, -weight_kg, -quantity_name, -quantity, -category, -short_name, -iso3, -country, -health_external, -year)
+
+# Add a t-1 predictor to emulate a time series.
+
+trade_us <- trade_us %>% 
+  mutate(tm1 = c(trade_us$trade_usd[2:nrow(trade_us)], NA))
+
+# Split into training and test data.
+
+training <- trade_us[2:nrow(trade_us), ]
+testing <- trade_us[1, ]
+
+###################
+### FUTURE SCENARIO
+###################
+
+# Generate a future scenario for 2025 based on user input.
+
+# First generate the business as usual scenario as a linear estimation of the past five years.
+
+recent <- trade_us[1:5,2:67] %>% 
+  mutate(year = c(2015:2011))
+
+# Predict the result.
+
+# Save a resulting vector.
+
+future <- c()
+
+for (var in names(recent)) {
+  
+  m <- lm(get(var) ~ year, data = recent)
+  future <- c(future, predict(m, newdata = tibble(year = 2025)))
+}
+
+#########
+### MODEL
+#########
+
+
+# Fit the PLS model.
+
+mod_pls <- plsr(trade_usd ~ .,
+                10,
+                data = training,
+                validation = "LOO")
+
+# plot(RMSEP(mod_pls))
+
+# Find the optimal number of components.
+
+n <- selectNcomp(mod_pls, method = "onesigma", plot = TRUE)
+
+# Predict the new trade amount.
+
+for (y in 1:5) {
+  print(predict(mod_pls, ncomp = y, newdata = testing))
+}
+  
+RMSEP(mod_pls, newdata = testing)

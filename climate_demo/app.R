@@ -42,7 +42,7 @@ ui <- fluidPage(
     # Select a country.
 
     column(
-      2,
+      1,
       selectInput("country",
         h3("Country"),
         choices = unique(trade$country),
@@ -53,13 +53,10 @@ ui <- fluidPage(
     # Select a trade category and flow (export/import).
 
     column(
-      2,
+      1,
       radioButtons("flow",
         h3("Flow type"),
-        choices = list(
-          "Export" = "Export",
-          "Import" = "Import"
-        ),
+        choices = c("Export", "Import"),
         selected = "Export"
       )
     ),
@@ -67,7 +64,7 @@ ui <- fluidPage(
     # Select a trade category.
 
     column(
-      2,
+      3,
       selectInput(
         inputId = "category",
         label = h3("Commodity category"),
@@ -90,7 +87,7 @@ ui <- fluidPage(
           "2045" = 2045,
           "2050" = 2050
         ),
-        selected = 2025
+        selected = 2035
       )
     ),
 
@@ -115,7 +112,7 @@ ui <- fluidPage(
     column(
       2,
       numericInput("degree",
-        h3("Annual change (%)"),
+        h3("Annual magnification (%)"),
         value = 1
       )
     )
@@ -131,7 +128,7 @@ ui <- fluidPage(
     
     # Display a sentence about how the trade metric will change.
     
-    ## goes here.
+    textOutput("summary"),
     
     # Display a plot of the projected trend.
 
@@ -161,7 +158,7 @@ server <- function(input, output, session) {
 
   # Get the reactive values from user input.
   # Use data only for the country of interest.
-
+  
   # Filter the trade data for country, export/import, and trade category.
 
   dft_filtered <- reactive({
@@ -214,22 +211,26 @@ server <- function(input, output, session) {
 
       # Drop non-numeric variables.
 
-      select(-commodity, -flow, -quantity_name, -category, -country, -health_external, -iso3, -name, -quantity)
+      select(-flow, -quantity_name, -category, -country, -health_external, -iso3, -name, -quantity)
 
-    # Add a t-1 predictor to emulate a time series.
-
-    dfm <- dfm %>%
-      mutate(tm1 = c(dfm$trade_usd[2:nrow(dfm)], NA))
-
+    # Eliminate duplicate years.
+    
+    recent <- dfm[!duplicated(dfm$year), ]
+    
     ### Generate the predictions.
     # First generate the business as usual scenario as a linear estimation of the past five years.
 
-    recent <- dfm[1:5, 2:67] %>%
+    recent <- recent[1:5, 4:68] %>%
       mutate(year = c(2015:2011))
 
     # Choose a custom time span.
 
     span <- c(2020:input$year)
+    
+    ###
+    # Make predictions based on a business as usual scenario.
+    ###
+    
     bau <- c()
     results <- tibble(rep(NA, length(2020:input$year)))
 
@@ -250,13 +251,58 @@ server <- function(input, output, session) {
 
     # Ignore the initiation column and the year column.
 
-    results <- results[, 2:67]
+    results <- results[, 2:66]
+    
+    ###
+    # Do the same for predictions under climate change.
+    ###
+    
+    cc <- c()
+    results_climate <- tibble(rep(NA, length(2020:input$year)))
+    
+    for (var in names(recent)) {
+      
+      # Linearly predict the future values of all of the climate scores.
+      
+      m <- lm(get(var) ~ year, data = recent)
+      
+      cc <- c(cc, predict(m, newdata = tibble(year = span)))
+      
+      # Add the climate change distortion manually.
+      
+      if (as.character(var) == input$metric) {
+        for (n in 1:length(cc)) {
+         cc[n] <- cc[n] * (1 + .01 * input$degree)^n 
+        }
+      }
+      
+      prediction <- as_tibble(cc)
+      colnames(prediction) <- var
+      
+      results_climate <- bind_cols(results_climate, prediction)
+      cc <- c()
+    }
+    
+    # Ignore the initiation column and the year column as above.
+    
+    results_climate <- results_climate[, 2:66]
 
+    # Calculate the total value sold (among many commodity types) during a given year.
+    
+    total <- dfm %>% 
+      group_by(year) %>% 
+      summarise(trade_usd = sum(trade_usd))
+      
+    single <- dfm[!duplicated(dfm$year), ] %>% 
+      select(-trade_usd, -commodity) %>% 
+      left_join(total, by = "year") %>% 
+      select(-year)
+    
     # Fit the PLS model.
 
     mod_pls <- plsr(trade_usd ~ .,
       10,
-      data = dfm,
+      data = single,
       validation = "LOO"
     )
 
@@ -287,6 +333,13 @@ server <- function(input, output, session) {
       as_tibble()
 
     colnames(predictions) <- "trade_usd"
+    
+    # Make predictions for the climate change data as well.
+    
+    predictions_climate <- predict(mod_pls, ncomp = n, newdata = results_climate) %>%
+      as_tibble()
+    
+    colnames(predictions_climate) <- "trade_usd"    
 
     # Visualize the changes in trade for the predictions.
     # First combine all of the results into one dataframe.
@@ -298,22 +351,36 @@ server <- function(input, output, session) {
       select(-value) %>%
       mutate(group = "Predicted (business as usual)")
 
+    # Do the same for the climate change predictions.
+    
+    predictions_climate <- predictions_climate %>%
+      bind_cols(tibble(value = span)) %>%
+      mutate(year = value) %>%
+      select(-value) %>%
+      mutate(group = "Predicted (climate change)")
+    
     # Make a new dataframe with the actual values used for the projections.
 
+    # First capture the actual values.
+    
+    original <- dft_filtered() %>% 
+      group_by(year) %>% 
+      summarise(trade_usd = sum(trade_usd))
+    
     actual <- tibble(
-      trade_usd = dfm$trade_usd[1:26],
-      year = 1991:2016,
+      trade_usd = original$trade_usd[1:28],
+      year = 1989:2016,
       group = "Actual"
     )
 
-    # Combine both to plot.
+    # Combine all three to plot.
 
-    final <- bind_rows(actual, predictions)
+    final <- bind_rows(actual, predictions, predictions_climate)
     
     # Adjust negative values to be zero.
     
     for (n in 1:nrow(final)) {
-      if (final$trade_usd[n] < 0) {
+      if (final$trade_usd[n] < 0 & !is.na(final$trade_usd[n])) {
         final$trade_usd[n] <- 0
       }
     }
@@ -323,9 +390,9 @@ server <- function(input, output, session) {
     final
   })
 
-  ###
-  # GRAPHS
-  ###
+  ##########################
+  # GRAPHS AND OTHER OUTPUTS
+  ##########################
 
   # Plot a graph of the entire trade metric of interest.
 
@@ -346,18 +413,37 @@ server <- function(input, output, session) {
         )
   })
   
+  # Summarize the effect of climate change.
+  
+  output$summary <- renderText({
+    
+    # Identify the magnitude of the difference.
+    
+    delta <- projections() %>% 
+      group_by(group) %>% 
+      summarise(total = sum(trade_usd))
+    
+    delta <- (delta$total[3] - delta$total[2]) / (as.numeric(input$year) - 2020)
+    
+    # Print the full summary sentence.
+    
+    paste0("A ", input$degree, " percent increase in the magnitude of this effect will be associated with an average ",
+           ifelse(delta > 0, "increase", "decrease"), " of $", formatC(abs(delta), format = "f", digits = 0, big.mark = ","),
+           " in these", ifelse(input$flow == "Export", " exports", " imports"), " per year until ", input$year, ".")
+  })
+  
   # Plot the projections. 
   
   output$projected_chart <- renderPlotly({
-    projections <- projections()
-    
+
     plot_ly(
-      data = projections,
+      data = projections(),
       x = ~year,
       y = ~trade_usd,
       type = "scatter",
       mode = "lines",
-      color = ~group
+      color = ~group,
+      linetype = ~group
     )
   })
   
@@ -365,9 +451,7 @@ server <- function(input, output, session) {
   
   output$projections_table <- renderDataTable({
     
-    projections <- projections()
-    
-    datatable(projections)
+    datatable(projections())
   })
   
 }

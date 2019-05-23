@@ -243,7 +243,7 @@ testing <- trade_us[1, ]
 ### FUTURE SCENARIOS
 ####################
 
-# Generate future scenarios for 2020 to 2035 based on user input.
+# Generate future scenarios based on user input.
 
 # First generate the business as usual scenario as a linear estimation of the past five years.
 

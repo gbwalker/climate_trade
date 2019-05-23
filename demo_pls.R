@@ -8,6 +8,7 @@ library(tidyverse)
 library(janitor)
 library(stringr)
 library(pls)
+library(mice)
 
 #################
 ### DATA CLEANING
@@ -125,6 +126,17 @@ df_i <- df_i %>%
 df <- cbind(df, df_i) %>% 
   as_tibble()
 
+# Impute NA values.
+# Use the cart method; otherwise a matrix can't be inverted.s
+
+imputed <- mice(df, m = 3, method = "cart")
+filled <- complete(imputed)
+
+df$child_malnutrition <- filled[, "child_malnutrition"]
+df$health_external <- filled[, "health_external"]
+df$slum <- filled[, "slum"]
+df$disaster_prep <- filled[, "disaster_prep"]
+
 # Save the cleaned data.
 
 write_rds(df, "df.rds")
@@ -177,6 +189,13 @@ trade <- trade_raw %>%
 
 # trade <- read_rds("trade.rds")
 
+# Edit the trade data for use in the Shiny app.
+
+trade %>% 
+  filter(! flow %in% c("Re-Import", "Re-Export")) %>% 
+  select(-comm_code, -weight_kg, -short_name, -iso3) %>% 
+  write_rds("trade_shiny.rds")
+
 # Select only the countries of interest in the climate data.
 
 df_small <- df %>% 
@@ -220,11 +239,11 @@ trade_us <- trade_us %>%
 training <- trade_us[2:nrow(trade_us), ]
 testing <- trade_us[1, ]
 
-###################
-### FUTURE SCENARIO
-###################
+####################
+### FUTURE SCENARIOS
+####################
 
-# Generate a future scenario for 2025 based on user input.
+# Generate future scenarios for 2020 to 2035 based on user input.
 
 # First generate the business as usual scenario as a linear estimation of the past five years.
 
@@ -233,20 +252,34 @@ recent <- trade_us[1:5,2:67] %>%
 
 # Predict the result.
 
-# Save a resulting vector.
+# Choose a custom time span.
 
-future <- c()
+span <- c(2020:2035)
+bau <- c()
+results <- tibble(rep(NA, 16))
 
 for (var in names(recent)) {
   
+  # Linearly predict the future values of all of the climate scores.
+  
   m <- lm(get(var) ~ year, data = recent)
-  future <- c(future, predict(m, newdata = tibble(year = 2025)))
+    
+  bau <- c(bau, predict(m, newdata = tibble(year = span)))
+  
+  prediction <- as_tibble(bau)
+  colnames(prediction) <- var
+  
+  results <- bind_cols(results, prediction)
+  bau <- c()
 }
+
+# Ignore the initiation column and the year column.
+
+results <- results[,2:67]
 
 #########
 ### MODEL
 #########
-
 
 # Fit the PLS model.
 
@@ -259,12 +292,45 @@ mod_pls <- plsr(trade_usd ~ .,
 
 # Find the optimal number of components.
 
-n <- selectNcomp(mod_pls, method = "onesigma", plot = TRUE)
+n <- selectNcomp(mod_pls, method = "onesigma", plot = FALSE)
 
 # Predict the new trade amount.
 
-for (y in 1:5) {
-  print(predict(mod_pls, ncomp = y, newdata = testing))
-}
-  
-RMSEP(mod_pls, newdata = testing)
+# Add the new variables to a blank df.
+
+predictions <- predict(mod_pls, ncomp = n, newdata = results) %>% 
+  as_tibble()
+
+colnames(predictions) <- "trade_usd"
+
+
+########
+### PLOT
+########
+
+# Visualize the changes in trade for the predictions.
+
+# First combine all of the results into one dataframe.
+
+# Label the predictions.
+
+predictions <- predictions %>% 
+  bind_cols(tibble(value = span)) %>% 
+  mutate(year = value) %>% 
+  select(-value) %>% 
+  mutate(group = "predicted")
+
+# Make a new dataframe with the actual values used for the projections.
+
+actual <- tibble(trade_usd = trade_us$trade_usd[1:5],
+                 year = 2011:2015,
+                 group = "actual")
+
+# Combine both to plot.
+
+plot <- bind_rows(actual, predictions)
+
+# Plot the results.
+
+ggplot(plot, aes(year, trade_usd, group = group, col = group)) +
+  geom_line(aes(linetype = group))

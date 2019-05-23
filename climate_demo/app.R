@@ -100,7 +100,7 @@ ui <- fluidPage(
       selectInput("metric",
         h3("Climate metric"),
         choices = sort(c(
-          "Overall ND-GAIN climate preparedness score" = "gain",
+          "Overall ND-GAIN climate preparedness" = "gain",
           "Political stability" = "political_stability",
           "Ecological footprint" = "eco_footprint",
           "Social inequality" = "inequality",
@@ -144,14 +144,14 @@ ui <- fluidPage(
       plotlyOutput("full_chart"),
 
       # Display a plot of the trend in climate score.
-
-      h2(textOutput("summary")),
-      plotlyOutput("projected_chart"),
-
+      
+      h2(textOutput("metric_title")),
+      plotlyOutput("metric_chart"),
+      
       # Display a plot of the trend in climate score.
 
-      h2(textOutput("metric_title")),
-      plotlyOutput("metric_chart")
+      h2(textOutput("summary")),
+      plotlyOutput("projected_chart")
     )
   )
 )
@@ -507,8 +507,8 @@ server <- function(input, output, session) {
     paste0(
       "A ", input$degree, " percent annual increase in the magnitude of ", ifelse(input$country %in% c("Russian Federation", "United States"), "the ", ""),
       input$country, "’s ",
-      ifelse(input$metric == "gain", "overall ND-GAIN climate preparedness score", tolower(names(metrics[correct]))),
-      " will be associated with an average ",
+      ifelse(input$metric == "gain", "overall ND-GAIN climate preparedness", tolower(names(metrics[correct]))),
+      " score will be associated with an average ",
       ifelse(delta > 0, "increase", "decrease"), " of $", formatC(abs(delta), format = "f", digits = 0, big.mark = ","),
       " in these", ifelse(input$flow == "Export", " exports", " imports"), " per year until ", input$year, "."
     )
@@ -577,10 +577,10 @@ server <- function(input, output, session) {
     paste0(
       ifelse(input$country %in% c("Russian Federation", "United States"), "The ", ""),
       input$country, "’s ",
-      ifelse(input$metric == "gain", "overall ND-GAIN climate preparedness score", tolower(names(metrics[correct]))),
+      ifelse(input$metric == "gain", "overall ND-GAIN climate preparedness", tolower(names(metrics[correct]))),
       ifelse(a$y[1] == a$y[21],
-        " was unchanged from 1995 to 2015.",
-        paste0(" trended ", ifelse(m$coefficients[2] < 0, "downward ", "upward "), "from 1995 to 2015.")
+        " score was unchanged from 1995 to 2015.",
+        paste0(" score trended ", ifelse(m$coefficients[2] < 0, "downward ", "upward "), "from 1995 to 2015.")
       )
     )
   })
